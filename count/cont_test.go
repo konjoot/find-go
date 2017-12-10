@@ -3,7 +3,6 @@ package count
 import (
 	"bufio"
 	"bytes"
-	"io"
 	"strings"
 	"testing"
 )
@@ -49,7 +48,7 @@ func TestMatchCount(t *testing.T) {
 				strings.Repeat(tc.pattern, tc.count),
 			))
 			count, err = matchCount(tc.str, r)
-			if err != io.EOF {
+			if err != nil {
 				t.Error(err)
 			}
 			t.Log("count =>", count)

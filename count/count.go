@@ -3,7 +3,6 @@ package count
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -11,16 +10,23 @@ import (
 	"github.com/konjoot/find-go/data"
 )
 
+// Count represents result for counting a substring into the source
 type Count struct {
 	Count  int
 	Target string
 	Err    error
 }
 
+// Counter is an interface for every match counter
 type Counter interface {
-	CountMatches(context.Context, io.Reader, io.Writer) (int, error)
+	// CountSubStrings counts implementation related matches,
+	// e.g. substrings and connects reader(input) and writer(output)
+	CountSubStrings(ctx context.Context, r io.Reader) *sync.WaitGroup
+	// CountCh returns chan with counts
+	CountCh() <-chan *Count
 }
 
+// NewCounter constructs substring Counter
 func NewCounter(subString string, poolSize int, source data.Source) Counter {
 	return &counter{
 		subString: subString,
@@ -30,6 +36,7 @@ func NewCounter(subString string, poolSize int, source data.Source) Counter {
 	}
 }
 
+// counter is a substring Counter
 type counter struct {
 	subString string
 	pool      chan struct{}
@@ -37,35 +44,28 @@ type counter struct {
 	countCh   chan *Count
 }
 
-func (c *counter) CountMatches(ctx context.Context, r io.Reader, w io.Writer) (int, error) {
-	wg := c.countSubStrings(ctx, r)
-	done := make(chan struct{})
-	go func() { wg.Wait(); close(done) }()
+// CountSubStrings reads targers from reader and sends them into separate routines
+// where they converts into the counter results. All parallelism is here.
+func (c *counter) CountSubStrings(ctx context.Context, r io.Reader) *sync.WaitGroup {
+	wg := new(sync.WaitGroup)
 
-	bufw := bufio.NewWriter(w)
-	var total int
-	var count *Count
-	for {
-		select {
-		case count = <-c.countCh:
-			total += count.Count
-			fmt.Fprintf(bufw, "Count for %s: %d\n", count.Target, count.Count)
-			bufw.Flush()
-			if count.Err != nil {
-				return total, count.Err
-			}
-		case <-ctx.Done():
-			return total, ctx.Err()
-		case <-done:
-			return total, nil
-		}
-	}
+	go c.startCounting(wg)(ctx, r)
+
+	return wg
 }
 
-func (c *counter) countSubStrings(ctx context.Context, r io.Reader) *sync.WaitGroup {
-	wg := new(sync.WaitGroup)
+// CountCh returns chan with counts
+func (c *counter) CountCh() <-chan *Count {
+	if c.countCh != nil {
+		return c.countCh
+	}
+	c.countCh = make(chan *Count, len(c.pool))
+	return c.countCh
+}
+
+func (c *counter) startCounting(wg *sync.WaitGroup) func(context.Context, io.Reader) {
 	wg.Add(1)
-	go func() {
+	return func(ctx context.Context, r io.Reader) {
 		defer wg.Done()
 
 		bufr := bufio.NewReader(r)
@@ -84,28 +84,34 @@ func (c *counter) countSubStrings(ctx context.Context, r io.Reader) *sync.WaitGr
 				return
 			}
 
-			c.pool <- struct{}{}
-			wg.Add(1)
-			go func(target string) {
-				defer func() {
-					<-c.pool
-					wg.Done()
-				}()
-
-				r, err := c.source.GetReader(target)
-				if err != nil {
-					return
-				}
-				defer r.Close()
-
-				count, err := matchCount(c.subString, bufio.NewReader(r))
-				c.countCh <- &Count{count, target, err}
-			}(target)
+			go c.readAndCount(wg)(target)
 		}
-	}()
-	return wg
+	}
 }
 
+func (c *counter) readAndCount(wg *sync.WaitGroup) func(string) {
+	c.pool <- struct{}{}
+	wg.Add(1)
+
+	return func(target string) {
+		defer func() {
+			<-c.pool
+			wg.Done()
+		}()
+
+		r, err := c.source.GetReader(target)
+		if err != nil {
+			c.countCh <- &Count{0, target, err}
+			return
+		}
+		defer r.Close()
+
+		count, err := matchCount(c.subString, bufio.NewReader(r))
+		c.countCh <- &Count{count, target, err}
+	}
+}
+
+// matchCount counts substring matches from io.Reader
 func matchCount(str string, r io.RuneReader) (int, error) {
 	var (
 		count int
