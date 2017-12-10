@@ -40,16 +40,38 @@ func main() {
 		cancel()
 	}()
 
-	subStringCounter := count.NewCounter(
+	counter := count.NewCounter(
 		subString,
 		poolSize,
 		data.NewSource(srcType),
 	)
 
-	total, err := subStringCounter.CountMatches(ctx, os.Stdin, os.Stdout)
+	total, err := countTotal(ctx, counter, os.Stdin, os.Stdout)
 	fmt.Fprintf(os.Stdout, "Total: %d\n", total)
 	if err != nil && err != io.EOF {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
+	}
+}
+
+func countTotal(ctx context.Context, counter count.Counter, r io.Reader, w io.Writer) (int, error) {
+	wg := counter.CountSubStrings(ctx, r)
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+
+	var err error
+	var total int
+	var count *count.Count
+	for {
+		select {
+		case count = <-counter.CountCh():
+			err = count.Err // remember only last error
+			total += count.Count
+			fmt.Fprintf(w, "Count for %s: %d\n", count.Target, count.Count)
+		case <-ctx.Done():
+			return total, ctx.Err()
+		case <-done:
+			return total, err
+		}
 	}
 }
