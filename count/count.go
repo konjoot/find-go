@@ -49,7 +49,7 @@ type counter struct {
 func (c *counter) CountSubStrings(ctx context.Context, r io.Reader) *sync.WaitGroup {
 	wg := new(sync.WaitGroup)
 
-	go c.startCounting(wg)(ctx, r)
+	go c.count(wg)(ctx, r)
 
 	return wg
 }
@@ -63,7 +63,7 @@ func (c *counter) CountCh() <-chan *Count {
 	return c.countCh
 }
 
-func (c *counter) startCounting(wg *sync.WaitGroup) func(context.Context, io.Reader) {
+func (c *counter) count(wg *sync.WaitGroup) func(context.Context, io.Reader) {
 	wg.Add(1)
 	return func(ctx context.Context, r io.Reader) {
 		defer wg.Done()
