@@ -24,7 +24,7 @@ func main() {
 	flag.StringVar(&srcType, "type", data.URL, "data source type enum=[url|file]")
 	flag.StringVar(&subString, "substring", "Go", "substring for counting")
 	flag.DurationVar(&duration, "duration", time.Minute, "execution time limit")
-	flag.IntVar(&poolSize, "pool-size", runtime.GOMAXPROCS(), "limits goroutines max count")
+	flag.IntVar(&poolSize, "pool-size", runtime.GOMAXPROCS(0), "limits goroutines max count")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
