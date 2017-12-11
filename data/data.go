@@ -39,7 +39,11 @@ func (s *source) GetReadCloser(target string) (io.ReadCloser, error) {
 		}
 		return resp.Body, nil
 	case File:
-		return os.Open(target)
+		file, err := os.Open(target)
+		if err != nil {
+			return nil, err
+		}
+		return file, nil
 	}
 	return nil, errors.New("Unsupported data source type")
 }
