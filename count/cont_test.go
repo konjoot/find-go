@@ -67,27 +67,28 @@ func TestCounter_count(t *testing.T) {
 			).(*subStringCounter)
 
 			wg := &sync.WaitGroup{}
-			counts := make(map[string]*Count)
-			go func() {
-				for count := range counter.CountCh() {
-					counts[count.Target] = count
-				}
-			}()
 
 			go counter.count(wg)(tc.ctx, tc.reader)
 
-			wg.Wait()
+			done := make(chan struct{})
+			go func() { wg.Wait(); close(done) }()
 
-			for k, v := range counts {
-				t.Log("v.Count =>", v.Count)
-				if v.Count != tc.expCounts[k].Count {
-					t.Error("Expected =>", tc.expCounts[k].Count)
-				}
-				t.Log("v.Err =>", v.Err)
-				if fmt.Sprint(v.Err) != fmt.Sprint(tc.expCounts[k].Err) {
-					t.Error("Expected =>", tc.expCounts[k].Err)
+			for {
+				select {
+				case count := <-counter.CountCh():
+					t.Log("count.Count =>", count.Count)
+					if count.Count != tc.expCounts[count.Target].Count {
+						t.Error("Expected =>", tc.expCounts[count.Target].Count)
+					}
+					t.Log("count.Err =>", count.Err)
+					if fmt.Sprint(count.Err) != fmt.Sprint(tc.expCounts[count.Target].Err) {
+						t.Error("Expected =>", tc.expCounts[count.Target].Err)
+					}
+				case <-done:
+					return
 				}
 			}
+
 		})
 	}
 }
@@ -146,7 +147,7 @@ func TestCounter_readAndCount(t *testing.T) {
 
 			t.Log("wg.max =>", wg.max)
 			if wg.max > tc.expWgMax {
-				t.Error("Expected <=", tc.expWgMax)
+				t.Error("Expected =>", tc.expWgMax)
 			}
 		})
 	}
