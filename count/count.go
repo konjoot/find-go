@@ -63,7 +63,7 @@ func (sc *subStringCounter) count(wg *sync.WaitGroup) func(context.Context, io.R
 	// incremet wait group counter
 	wg.Add(1)
 	// target's emitter, which reads lines(targets) from
-	// stdOut and schedule substring counting for them
+	// io.Reader and schedule substring counting for them
 	return func(ctx context.Context, r io.Reader) {
 		defer wg.Done() // on exit decrement wait group counter
 
