@@ -72,7 +72,7 @@ func CountTotal(ctx context.Context, counter count.Counter, r io.Reader, w io.Wr
 	wg := counter.Count(ctx, r)
 	// done is a cancellation channel
 	done := make(chan struct{})
-	// waits for all routines in CountSubStrings to finish
+	// waits for all routines in counter.Count to finish
 	// and closes done channel to finish the app
 	go func() { wg.Wait(); close(done) }()
 
@@ -88,7 +88,7 @@ func CountTotal(ctx context.Context, counter count.Counter, r io.Reader, w io.Wr
 			if count.Err != nil {
 				err = count.Err // remember only last error
 			}
-			total += count.Count // increment total with count
+			total += count.Count
 			fmt.Fprintf(w, "Count for %s: %d\n", count.Target, count.Count)
 		case <-ctx.Done():
 			// context cancelled
