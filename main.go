@@ -1,4 +1,4 @@
-package main
+package find
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func main() {
 	)
 
 	// counts total and prints results
-	total, err := countTotal(ctx, counter, os.Stdin, os.Stdout)
+	total, err := CountTotal(ctx, counter, os.Stdin, os.Stdout)
 	fmt.Fprintf(os.Stdout, "Total: %d\n", total)
 	if err != nil && err != io.EOF {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -64,11 +64,11 @@ func main() {
 	}
 }
 
-// countTotal uses counter for substrings counting
+// CountTotal uses counter for substrings counting
 // reads targers from io.Reader,
 // writes counts for every target into the io.Writer
 // returns total count and last counting error
-func countTotal(ctx context.Context, counter count.Counter, r io.Reader, w io.Writer) (int, error) {
+func CountTotal(ctx context.Context, counter count.Counter, r io.Reader, w io.Writer) (int, error) {
 	wg := counter.Count(ctx, r)
 	// done is a cancellation channel
 	done := make(chan struct{})
@@ -85,7 +85,9 @@ func countTotal(ctx context.Context, counter count.Counter, r io.Reader, w io.Wr
 		select {
 		case count = <-counter.CountCh():
 			// new count appeared
-			err = count.Err      // remember only last error
+			if count.Err != nil {
+				err  = count.Err      // remember only last error
+			}
 			total += count.Count // increment total with count
 			fmt.Fprintf(w, "Count for %s: %d\n", count.Target, count.Count)
 		case <-ctx.Done():
