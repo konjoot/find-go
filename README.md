@@ -5,6 +5,8 @@ Substrings counter. The app gets strings from StdIn, reads data from sources, wh
 
 `go get -u github.com/konjoot/find-go/...`
 
+Or from the project's root run `go install .`
+
 # Usage
 
 Use `-h` to get help about flags
