@@ -1,4 +1,4 @@
-package find_test
+package main
 
 import (
 	"bytes"
@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	find "github.com/konjoot/find-go"
 	"github.com/konjoot/find-go/count"
 	"github.com/konjoot/find-go/data"
 )
@@ -137,7 +136,7 @@ func TestCountTotal(t *testing.T) {
 				tc.poolSize,
 				data.NewSource(tc.srcType),
 			)
-			total, err := find.CountTotal(context.Background(), counter, r, w)
+			total, err := CountTotal(context.Background(), counter, r, w)
 			t.Log("err =>", err)
 			if fmt.Sprint(err) != fmt.Sprint(tc.expErr) {
 				t.Error("Expected =>", tc.expErr)

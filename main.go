@@ -1,4 +1,4 @@
-package find
+package main
 
 import (
 	"context"
@@ -86,7 +86,7 @@ func CountTotal(ctx context.Context, counter count.Counter, r io.Reader, w io.Wr
 		case count = <-counter.CountCh():
 			// new count appeared
 			if count.Err != nil {
-				err  = count.Err      // remember only last error
+				err = count.Err // remember only last error
 			}
 			total += count.Count // increment total with count
 			fmt.Fprintf(w, "Count for %s: %d\n", count.Target, count.Count)
