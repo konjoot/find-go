@@ -59,7 +59,7 @@ func (sc *subStringCounter) CountCh() <-chan *Count {
 }
 
 // count is a constructor for the target's emitter
-func (sc *subStringCounter) count(wg *sync.WaitGroup) func(context.Context, io.Reader) {
+func (sc *subStringCounter) count(wg waitGrouper) func(context.Context, io.Reader) {
 	// incremet wait group counter
 	wg.Add(1)
 	// target's emitter, which reads lines(targets) from
@@ -78,6 +78,9 @@ func (sc *subStringCounter) count(wg *sync.WaitGroup) func(context.Context, io.R
 			if err == io.EOF {
 				return
 			}
+			if target == "" {
+				return
+			}
 			if err != nil {
 				sc.countCh <- &Count{0, target, err}
 				return
@@ -89,7 +92,7 @@ func (sc *subStringCounter) count(wg *sync.WaitGroup) func(context.Context, io.R
 }
 
 // readAndCount is a constructor of the substrings counter
-func (sc *subStringCounter) readAndCount(wg *sync.WaitGroup) func(string) {
+func (sc *subStringCounter) readAndCount(wg waitGrouper) func(string) {
 	// wait for a place in the pool
 	// the number of routines is limited by the size of the pool
 	sc.pool <- struct{}{}
@@ -116,19 +119,22 @@ func (sc *subStringCounter) readAndCount(wg *sync.WaitGroup) func(string) {
 		}
 		defer r.Close()
 
-		count, err := matchCount(sc.subString, bufio.NewReader(r))
+		count, err := countSubStrings(sc.subString, bufio.NewReader(r))
 		sc.countCh <- &Count{count, target, err}
 	}
 }
 
-// matchCount counts substring matches from io.Reader
-func matchCount(str string, r io.RuneReader) (int, error) {
+// countSubStrings counts substring matches from io.Reader
+func countSubStrings(str string, r io.RuneReader) (int, error) {
 	var (
 		count int
-		buf   = make([]rune, len([]rune(str)))
 		rn    rune
+		buf   = make([]rune, len([]rune(str)))
 		err   error
 	)
+	if len([]rune(str)) == 0 {
+		return 0, nil
+	}
 	for err == nil {
 		rn, _, err = r.ReadRune()
 		buf = append(buf[1:], rn)
@@ -141,4 +147,10 @@ func matchCount(str string, r io.RuneReader) (int, error) {
 	}
 
 	return count, nil
+}
+
+// waitGrouper is an interface for sync.WaitGroup
+type waitGrouper interface {
+	Add(int)
+	Done()
 }

@@ -3,11 +3,156 @@ package count
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
 	"strings"
+	"sync"
 	"testing"
 )
 
-func TestMatchCount(t *testing.T) {
+func TestCounter_count(t *testing.T) {
+
+	for _, tc := range []struct {
+		name      string
+		subString string
+		poolSize  int
+		ctx       context.Context
+		reader    io.Reader
+		source    string
+		sourceErr error
+		expCounts map[string]*Count
+	}{
+		{
+			name:      "FindGoSuccess",
+			subString: "Go",
+			poolSize:  2,
+			ctx:       context.Background(),
+			reader:    bytes.NewBufferString("one\ntwo\nthree\nfour\nfive"),
+			source:    "GogoGo",
+			sourceErr: nil,
+			expCounts: map[string]*Count{
+				"one":   &Count{2, "one", nil},
+				"two":   &Count{2, "two", nil},
+				"three": &Count{2, "three", nil},
+				"four":  &Count{2, "four", nil},
+				"five":  &Count{2, "five", nil},
+			},
+		},
+		{
+			name:      "FindGoDataSourceErr",
+			subString: "Go",
+			poolSize:  4,
+			ctx:       context.Background(),
+			reader:    bytes.NewBufferString("one\ntwo\n\nthree"),
+			source:    "GoGo",
+			sourceErr: errors.New("test"),
+			expCounts: map[string]*Count{
+				"one":   &Count{0, "one", errors.New("test")},
+				"two":   &Count{0, "two", errors.New("test")},
+				"three": &Count{0, "three", errors.New("test")},
+			},
+		},
+	} {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			dataSource := &mockDataSource{tc.source, tc.sourceErr}
+			counter := NewSubStringCounter(
+				tc.subString,
+				tc.poolSize,
+				dataSource,
+			).(*subStringCounter)
+
+			wg := &sync.WaitGroup{}
+			counts := make(map[string]*Count)
+			go func() {
+				for count := range counter.CountCh() {
+					counts[count.Target] = count
+				}
+			}()
+
+			go counter.count(wg)(tc.ctx, tc.reader)
+
+			wg.Wait()
+
+			for k, v := range counts {
+				t.Log("v.Count =>", v.Count)
+				if v.Count != tc.expCounts[k].Count {
+					t.Error("Expected =>", tc.expCounts[k].Count)
+				}
+				t.Log("v.Err =>", v.Err)
+				if fmt.Sprint(v.Err) != fmt.Sprint(tc.expCounts[k].Err) {
+					t.Error("Expected =>", tc.expCounts[k].Err)
+				}
+			}
+		})
+	}
+}
+
+// To ensure that pool perform as expected
+func TestCounter_readAndCount(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		poolSize      int
+		routinesCount int
+		expWgMax      int
+		expErr        error
+	}{
+		{
+			name:          "23RoutinesBy4",
+			poolSize:      4,
+			routinesCount: 23,
+			expWgMax:      4,
+			expErr:        nil,
+		},
+		{
+			name:          "23RoutinesBy90",
+			poolSize:      90,
+			routinesCount: 23,
+			expWgMax:      23,
+			expErr:        nil,
+		},
+		{
+			name:          "13RoutinesBy1",
+			poolSize:      1,
+			routinesCount: 13,
+			expWgMax:      1,
+			expErr:        nil,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dataSource := &mockDataSource{}
+			counter := NewSubStringCounter(
+				"",
+				tc.poolSize,
+				dataSource,
+			).(*subStringCounter)
+
+			wg := &mockWaitGroup{WaitGroup: sync.WaitGroup{}}
+
+			go func() {
+				for range counter.CountCh() {
+				}
+			}()
+
+			for i := 0; i < tc.routinesCount; i++ {
+				go counter.readAndCount(wg)("target")
+			}
+
+			wg.WaitGroup.Wait()
+
+			t.Log("wg.max =>", wg.max)
+			if wg.max > tc.expWgMax {
+				t.Error("Expected <=", tc.expWgMax)
+			}
+		})
+	}
+}
+
+func Test_countSubStrings(t *testing.T) {
 	var (
 		r     *bufio.Reader
 		count int
@@ -22,7 +167,7 @@ func TestMatchCount(t *testing.T) {
 		expCount int
 	}{
 		{
-			name:     "Golang100Times",
+			name:     "Go",
 			str:      "Golang",
 			pattern:  "Something about Golang golang go",
 			count:    100,
@@ -31,7 +176,7 @@ func TestMatchCount(t *testing.T) {
 		{
 			name:     "Го10Times",
 			str:      "Го",
-			pattern:  "ГоПедагог",
+			pattern:  "Голанг",
 			count:    10,
 			expCount: 10,
 		},
@@ -42,12 +187,19 @@ func TestMatchCount(t *testing.T) {
 			count:    1,
 			expCount: 0,
 		},
+		{
+			name:     "EmptyString",
+			str:      "",
+			pattern:  "hidden tes\t",
+			count:    10,
+			expCount: 0,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r = bufio.NewReader(bytes.NewBufferString(
 				strings.Repeat(tc.pattern, tc.count),
 			))
-			count, err = matchCount(tc.str, r)
+			count, err = countSubStrings(tc.str, r)
 			if err != nil {
 				t.Error(err)
 			}
@@ -57,4 +209,37 @@ func TestMatchCount(t *testing.T) {
 			}
 		})
 	}
+}
+
+type mockDataSource struct {
+	source    string
+	sourceErr error
+}
+
+func (ds *mockDataSource) GetReadCloser(target string) (io.ReadCloser, error) {
+	return ioutil.NopCloser(bytes.NewBufferString(ds.source)), ds.sourceErr
+}
+
+type mockWaitGroup struct {
+	sync.WaitGroup
+	sync.Mutex
+	counter int
+	max     int
+}
+
+func (wg *mockWaitGroup) Add(delta int) {
+	wg.Lock()
+	wg.counter += delta
+	if wg.max < wg.counter {
+		wg.max = wg.counter
+	}
+	wg.Unlock()
+	wg.WaitGroup.Add(delta)
+}
+
+func (wg *mockWaitGroup) Done() {
+	wg.Lock()
+	wg.counter--
+	wg.Unlock()
+	wg.WaitGroup.Done()
 }
