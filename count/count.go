@@ -121,7 +121,8 @@ func (sc *subStringCounter) readAndCount(wg waitGrouper) func(string) {
 	}
 }
 
-// countSubStrings counts substring matches from io.Reader
+// countSubStrings counts substring matches from io.Reader.
+// Not an efficient solution, but robust enough.
 func countSubStrings(str string, r io.RuneReader) (int, error) {
 	var (
 		count int

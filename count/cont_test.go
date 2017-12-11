@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/quick"
 )
 
 func TestCounter_count(t *testing.T) {
@@ -106,14 +107,14 @@ func TestCounter_readAndCount(t *testing.T) {
 			name:          "23RoutinesBy4",
 			poolSize:      4,
 			routinesCount: 23,
-			expWgMax:      4,
+			expWgMax:      5,
 			expErr:        nil,
 		},
 		{
 			name:          "23RoutinesBy90",
 			poolSize:      90,
 			routinesCount: 23,
-			expWgMax:      23,
+			expWgMax:      24,
 			expErr:        nil,
 		},
 		{
@@ -209,6 +210,22 @@ func Test_countSubStrings(t *testing.T) {
 				t.Error("Expected =>", tc.expCount)
 			}
 		})
+	}
+}
+
+func BenchmarCountSubStringsOnRandInput(b *testing.B) {
+	config := &quick.Config{MaxCount: b.N}
+
+	bench := func(subStrng string, source string) bool {
+		_, err := countSubStrings(subStrng, bytes.NewBufferString(source))
+		if err != nil {
+			b.Log("Err =>", err)
+		}
+		return err == nil
+	}
+
+	if err := quick.Check(bench, config); err != nil {
+		b.Error(err)
 	}
 }
 
