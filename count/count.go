@@ -85,11 +85,11 @@ func (sc *subStringCounter) count(wg waitGrouper) func(context.Context, io.Reade
 		for err == nil {
 			target, err = bufr.ReadString('\n')
 			target = strings.TrimSuffix(target, "\n")
-			if target == "" {
-				return
-			}
 			if err != nil && err != io.EOF {
 				sc.countCh <- &Count{0, target, err}
+				return
+			}
+			if target == "" {
 				return
 			}
 
