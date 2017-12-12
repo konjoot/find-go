@@ -213,7 +213,7 @@ func Test_countSubStrings(t *testing.T) {
 	}
 }
 
-func BenchmarCountSubStringsOnRandInput(b *testing.B) {
+func BenchmarkCountSubStringsOnRandInput(b *testing.B) {
 	config := &quick.Config{MaxCount: b.N}
 
 	bench := func(subStrng string, source string) bool {
