@@ -16,6 +16,7 @@ func TestDataSource_NewReadCloser(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
+	defer file.Close()
 	exampleCom, err := ioutil.ReadAll(file)
 	if err != nil {
 		t.Error(err)

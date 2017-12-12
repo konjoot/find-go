@@ -48,16 +48,16 @@ func TestCountTotal(t *testing.T) {
 			poolSize:  4,
 			srcType:   data.URL,
 			input: []string{
-				"https://golang.org",
-				"https://golang.org",
-				"https://golang.org",
+				"https://ru.wikipedia.org/wiki/%D0%93%D0%BE",
+				"https://ru.wikipedia.org/wiki/%D0%93%D0%BE",
+				"https://ru.wikipedia.org/wiki/%D0%93%D0%BE",
 			},
 			output: []string{
-				"Count for https://golang.org: 0",
-				"Count for https://golang.org: 0",
-				"Count for https://golang.org: 0",
+				"Count for https://ru.wikipedia.org/wiki/%D0%93%D0%BE: 155",
+				"Count for https://ru.wikipedia.org/wiki/%D0%93%D0%BE: 155",
+				"Count for https://ru.wikipedia.org/wiki/%D0%93%D0%BE: 155",
 			},
-			expTotal: 0,
+			expTotal: 465,
 			expErr:   nil,
 		},
 		{

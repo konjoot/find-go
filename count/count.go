@@ -17,11 +17,12 @@ type Count struct {
 	Err    error
 }
 
-// Counter is an interface for every match counter
+// Counter is an interface for every counter
 type Counter interface {
-	// Count counts implementation related matches, e.g. substrings
+	// Count counts implementation related matches, e.g. substring inclusions
+	// This is an async method.
 	Count(ctx context.Context, r io.Reader) *sync.WaitGroup
-	// CountCh returns chan with counts
+	// CountCh returns chan with Counts (*Count)
 	CountCh() <-chan *Count
 }
 
@@ -31,11 +32,11 @@ func NewSubStringCounter(subString string, poolSize int, source data.Source) Cou
 		subString: subString,
 		source:    source,
 		pool:      make(chan struct{}, poolSize),
-		countCh:   make(chan *Count, poolSize),
+		countCh:   make(chan *Count),
 	}
 }
 
-// subStringCounter is a substring Counter
+// subStringCounter is a substring inclusion Counter
 type subStringCounter struct {
 	subString string
 	pool      chan struct{}
@@ -43,8 +44,17 @@ type subStringCounter struct {
 	countCh   chan *Count
 }
 
-// Count reads targers from reader and sends them into separate routines
-// where they converts into the counter results.
+// Count reads targers from the io.Reader and sends them into separate routines
+// where they being converted into the Counts(*Count).
+// Method starts number of goroutines for counting every target's source
+// and returns sync.WaitGroup. You can easily waits until
+// all goroutines finish with wg.Wait() call.
+//
+// Example:
+// wg := counter.Count(ctx, r)
+// done := make(chan struct{})
+// go func(){wg.Wait(); close(done)}()
+// <-done // all counts is calculated
 func (sc *subStringCounter) Count(ctx context.Context, r io.Reader) *sync.WaitGroup {
 	wg := new(sync.WaitGroup)
 
@@ -53,7 +63,7 @@ func (sc *subStringCounter) Count(ctx context.Context, r io.Reader) *sync.WaitGr
 	return wg
 }
 
-// CountCh returns chan with counts
+// CountCh returns channel with Counts
 func (sc *subStringCounter) CountCh() <-chan *Count {
 	return sc.countCh
 }
@@ -62,7 +72,7 @@ func (sc *subStringCounter) CountCh() <-chan *Count {
 func (sc *subStringCounter) count(wg waitGrouper) func(context.Context, io.Reader) {
 	// incremet wait group counter
 	wg.Add(1)
-	// target's emitter, which reads lines(targets) from
+	// target's emitter, which reads lines(targets) from the
 	// io.Reader and schedule substring counting for them
 	return func(ctx context.Context, r io.Reader) {
 		defer wg.Done() // on exit decrement wait group counter
@@ -99,7 +109,8 @@ func (sc *subStringCounter) readAndCount(wg waitGrouper) func(string) {
 	// substring counter,
 	// gets target as a string,
 	// gets it's data from data.Source,
-	// counts substrings ans writes them into sc.countCh
+	// counts substring inclusions in data
+	// and writes them into the Counts channel
 	return func(target string) {
 		// on exit
 		defer func() {
@@ -121,16 +132,17 @@ func (sc *subStringCounter) readAndCount(wg waitGrouper) func(string) {
 	}
 }
 
-// countSubStrings counts substring matches from io.Reader.
-// Not an efficient solution, but robust enough.
+// countSubStrings counts substring inclusions in data from the io.Reader.
+// Not so efficient solution, but robust enough.
 func countSubStrings(str string, r io.RuneReader) (int, error) {
 	var (
-		count int
-		rn    rune
-		buf   = make([]rune, len([]rune(str)))
-		err   error
+		count  int
+		rn     rune
+		strLen = len([]rune(str))
+		buf    = make([]rune, strLen)
+		err    error
 	)
-	if len([]rune(str)) == 0 {
+	if strLen == 0 {
 		return 0, nil
 	}
 	for err == nil {

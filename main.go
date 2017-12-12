@@ -30,6 +30,11 @@ func main() {
 	flag.IntVar(&poolSize, "pool-size", runtime.GOMAXPROCS(0), "limits goroutines max count")
 	flag.Parse()
 
+	if poolSize < 1 {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", "pool-size should be greater than 0")
+		os.Exit(1)
+	}
+
 	// application wide context initialization
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
